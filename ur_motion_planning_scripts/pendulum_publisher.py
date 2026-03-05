@@ -11,6 +11,7 @@ class PendulumPublisher(Node):
         # Publish at 20Hz (0.05s)
         self.timer = self.create_timer(0.05, self.timer_callback)
         self.start_time = time.time()
+        self.last_state = None
         self.get_logger().info('Pendulum Publisher started. Publishing to /pendulum_target')
 
     def timer_callback(self):
@@ -23,17 +24,26 @@ class PendulumPublisher(Node):
         amplitude = 0.15 # meters
         frequency = 0.5 # Hz (0.5 cycles per second)
         
-        # Calculate target Y based on sine wave
-        y = center_y + amplitude * math.sin(2 * math.pi * frequency * t)
+        # Switch between endpoints instead of streaming sine wave
+        period = 1.0 / frequency
+        phase = (t % period) / period
         
-        # Calculate velocity (derivative of position) to help the mover script
-        # v = d/dt (A * sin(wt)) = A * w * cos(wt)
-        omega = 2 * math.pi * frequency
-        vy = amplitude * omega * math.cos(omega * t)
-        speed = abs(vy)
+        if phase < 0.5:
+            state = 1
+            y = center_y + amplitude
+        else:
+            state = -1
+            y = center_y - amplitude
         
-        # Ensure a minimum speed so the mover doesn't calculate infinite duration
-        if speed < 0.1: speed = 0.1
+        # Only publish on state change
+        if state == self.last_state:
+            return
+        self.last_state = state
+        
+        # Calculate speed to reach destination in half period (plus margin)
+        dist = 2 * amplitude
+        duration = period / 2.0
+        speed = (dist / duration) * 1.2 # 20% speed margin to ensure arrival
         
         msg = Float64MultiArray()
         # Format: [x, y, z, velocity]
