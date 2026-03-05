@@ -77,22 +77,26 @@ class URMoveToConfig(Node):
         # Extract the 6 active joints
         target_joints = list(ik_solution[2:8])
 
-        # Safety check for configuration jumps (e.g. > 45 degrees in one step)
+        # Safety check for configuration jumps
         max_diff = max([abs(t - c) for t, c in zip(target_joints, self.current_joints)])
-        if max_diff > 0.8:
-            self.get_logger().warn("IK solution requires large jump. Ignoring command.")
-            return
-
-        # Calculate duration based on Cartesian distance and requested velocity
-        # We use Forward Kinematics on the current joints to get the current Cartesian position
-        current_fk = self.chain.forward_kinematics(ik_seed)
-        current_pos = current_fk[:3, 3]
         
-        dist = np.linalg.norm(target_pos - current_pos)
-        
-        # Ensure a minimum time step to prevent invalid acceleration faults
-        # 0.02s is 50Hz, which is a safe lower bound for trajectory points
-        duration_sec = max(dist / velocity, 0.02)
+        if max_diff > 0.5:
+            # If we are far from the target, treat this as an approach move.
+            # We ignore the requested velocity and move at a safe joint speed.
+            safe_joint_vel = 0.5 # rad/s
+            duration_sec = max_diff / safe_joint_vel
+            self.get_logger().info(f"Approaching target (diff: {max_diff:.2f} rad). Duration: {duration_sec:.2f}s", throttle_duration_sec=1.0)
+        else:
+            # Calculate duration based on Cartesian distance and requested velocity
+            # We use Forward Kinematics on the current joints to get the current Cartesian position
+            current_fk = self.chain.forward_kinematics(ik_seed)
+            current_pos = current_fk[:3, 3]
+            
+            dist = np.linalg.norm(target_pos - current_pos)
+            
+            # Ensure a minimum time step to prevent invalid acceleration faults
+            # 0.02s is 50Hz, which is a safe lower bound for trajectory points
+            duration_sec = max(dist / velocity, 0.02)
 
         # Construct and publish trajectory
         traj_msg = JointTrajectory()
