@@ -30,6 +30,9 @@ class KalmanFilter:
         H = np.array([[1, 0]])
         Q = np.array([[1, 0], [0, 1]])
         R = np.array([[1]])
+        
+        x0 = np.array([[0], [1]])
+        P0 = np.array([[1, 0], [0, 1]])
 
         kf = KalmanFilter(F, B, H, Q, R, x0, P0)
 
