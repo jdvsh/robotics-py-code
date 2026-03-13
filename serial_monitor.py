@@ -1,9 +1,37 @@
 import serial
 import time
+import threading
 
 baud = 115200
 port = "/dev/ttyACM0"
 serialDevice = None
+
+dataBuffer = [0, 0, 0, 0]
+dataSum = 0
+samples = 0
+
+bufferLock = threading.Lock()
+
+
+# result = (effective velocity in rad/s??, absolute rotation, time between data request)
+
+def getData():
+    global dataBuffer
+    global bufferLock
+    global dataSum
+    global samples
+    scalingFactor = 1.07153 ## 2pi/reported value for a full rotation
+
+    bufferLock.acquire()
+    result = (scalingFactor*dataBuffer[2]/(dataBuffer[3]/1000000)/samples, dataSum*scalingFactor, dataBuffer[3]/1000000 )
+    dataBuffer = [0,0,0,0]
+    samples = 0
+    bufferLock.release()
+    return result
+
+
+
+
 
 
 """
@@ -13,6 +41,8 @@ serialDevice = None
 def init():
     global serialDevice
     serialDevice = serial.Serial(port, baud, timeout = 1.0)
+    thread = threading.Thread(target=threadLoop)
+    thread.start()
 
 
 
@@ -28,8 +58,13 @@ def init():
     to the access point. 
     
 """
-def getData():
+def updateData():
+    global dataSum
     global serialDevice
+    global dataBuffer
+    global bufferLock
+    global samples
+
     data = serialDevice.readline().decode('utf-8').rstrip().split(",")
     if data == ['']:
         data = [0, 0, 0, 0]
@@ -38,15 +73,28 @@ def getData():
         data[1] = float(data[1][2:])
         data[2] = float(data[2][2:])
         data[3] = int(data[3][3:])
-    return data
 
+    dataSum +=data[2]*data[3]/1000000
 
+    bufferLock.acquire()
+    for x in range(4):
+        dataBuffer[x] += data[x]
+    samples+=1
+    bufferLock.release()
+
+def threadLoop():
+    # print("starting loop")
+    while True:
+        updateData()
 
 
 def main():
     while True:
+        input("")
         data = getData()
         print(data)
+
+    
 
 
 
